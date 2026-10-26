@@ -22,6 +22,12 @@ import * as path from "node:path";
 
 /** 50KB — pi's DEFAULT_MAX_BYTES, the output ceiling for every fs tool. */
 export const MAX_OUTPUT_BYTES = 50 * 1024;
+/** Fork audit C11: regex input bounds — the match never sees a longer
+ * pattern or more leading chars of a line, so an accidental (or injected)
+ * catastrophic-backtracking regex gets bounded input instead of the whole
+ * file. Output truncation stays at GREP_MAX_LINE_LENGTH. */
+export const GREP_MAX_PATTERN_CHARS = 512;
+export const GREP_MATCH_LINE_CHARS = 1000;
 /** pi's grep line-truncation length (GREP_MAX_LINE_LENGTH). */
 export const GREP_MAX_LINE_LENGTH = 500;
 /** Wall-clock budget for tree walks (find/grep over a whole home dir). */
@@ -37,10 +43,33 @@ const EXCLUDED_DIR_NAMES = new Set(["node_modules", ".git", "Library", ".Trash"]
 
 /** Resolve a tool path argument: absolute stays, relative/absent → home.
  *  (pi resolves against the project cwd; the harness's "project" is the
- *  learner's life, so the home directory is the anchor.) */
+ *  learner's life, so the home directory is the anchor.)
+ *
+ *  SECRETS DENYLIST (fork audit C10): the fs tools ingest prompts that
+ *  carry untrusted external content (research briefs, PDF text), so the
+ *  read surface refuses secrets material with an honest error — an
+ *  injected instruction must hit a refusal it can see and explain, not
+ *  the key store. Everything else keeps the user-decided v0 scope. */
+const DENIED_PATH_PATTERNS: RegExp[] = [
+	/[\\/]\.ssh([\\/]|$)/, // the .ssh directory and everything inside it
+	/[\\/]\.pi[\\/]agent[\\/]auth\.json$/, // Pi SDK global credentials (#44)
+	/(^|[\\/])auth\.json$/, // LearnHarness' own BYOK key file
+	/github-copilot-credentials\.json$/, // subscription credentials (subscription-store.cjs)
+	/xai-credentials\.json$/,
+	/(^|[\\/])\.env(\.[^\\/]*)?$/, // dotenv secrets
+	/\.pem$/, // certificates / private keys
+];
+
+export function deniedSourcePath(resolved: string): boolean {
+	return DENIED_PATH_PATTERNS.some((re) => re.test(resolved));
+}
+
 export function resolveSourcePath(p?: string): string {
-	if (!p) return os.homedir();
-	return path.isAbsolute(p) ? p : path.join(os.homedir(), p);
+	const resolved = !p ? os.homedir() : path.isAbsolute(p) ? p : path.join(os.homedir(), p);
+	if (deniedSourcePath(resolved)) {
+		throw new Error(`Refused: ${resolved} holds secrets and is not readable by the learning tools`);
+	}
+	return resolved;
 }
 
 /** pi's formatSize idiom (50KB prints as "50.0KB"). */

@@ -9,8 +9,11 @@ import { resolveSourcePath } from "./fs-shared.ts";
  * The read tool — sources v0 (2026-09): a Node port of pi's read semantics
  * for the learner's local files. The flow is learner-owned: he pastes file
  * paths into the chat, the agent reads on its own terms (nothing is
- * auto-injected). Unrestricted local reads are the user-decided v0 scope —
- * this is a personal study harness, not a multi-tenant service.
+ * auto-injected). Local reads are the user-decided v0 scope — this is a
+ * personal study harness, not a multi-tenant service — EXCEPT the secrets
+ * denylist (fs-shared.ts resolveSourcePath, fork audit C10): key stores
+ * and credential files are refused with an honest error, because the
+ * agent's prompts also carry untrusted external content (research/PDF).
  *
  * Ported behaviors (mirroring pi's dist/core/tools/read.js):
  * - text files: utf-8, offset (1-indexed) / limit slicing, and the
