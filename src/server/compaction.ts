@@ -301,5 +301,15 @@ export function kickCompaction(buildDeps: () => CompactionDeps | null, chatId: s
 	if (projectedContextTokens(record.messages, deps.systemPromptTokens) <= deps.thresholdTokens) return;
 	const run = compact(deps, chatId);
 	state().inFlight.set(chatId, run);
-	void run.finally(() => state().inFlight.delete(chatId));
+	// CRASH CONTAINMENT (fork audit C4): the kick is fire-and-forget at a
+	// settle seam — a compact() rejection here (the pre-try region has no
+	// catch of its own) would escape as an unhandled rejection and
+	// terminate the process, and the Electron main never respawns the
+	// server child. Log and clear the registry like compact's own catch;
+	// the record stays honest (nothing was written).
+	void run
+		.catch((err: unknown) => {
+			console.error(`[chat ${chatId}] background compaction crashed:`, err);
+		})
+		.finally(() => state().inFlight.delete(chatId));
 }
