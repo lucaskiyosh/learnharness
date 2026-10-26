@@ -75,7 +75,12 @@ export * from "./session-navigation.ts";
 export * from "./auth-keys.ts";
 // keyboard.ts: the shortcut registry + binding normalization (pure, browser-safe).
 export * from "./keyboard.ts";
-export * from "./coverage.ts";
+// coverage.ts stays OUT of the barrel (the browser-safety law, §2.1): it
+// needs node:crypto for the fingerprints. Server callers import it
+// directly (turn-service.ts, extraction, chats route) — nothing in the
+// shell uses a coverage symbol (verified by grep + typecheck, fork audit
+// C8: this line had crept back in and silently made the barrel's
+// browser-safety claim depend on tree-shaking).
 // session-markdown.ts (2026-09-27 engine; first consumer 2026-10-06): the
 // ONE session→markdown formatter — the extractor's view and the user-facing
 // export share it. Pure, browser-safe.
