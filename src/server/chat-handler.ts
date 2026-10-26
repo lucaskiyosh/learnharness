@@ -376,96 +376,109 @@ export async function handleChatInput(
 	// enabled). The definitive toggleable set is TOGGLEABLE_TOOLS — the
 	// sub-agent JOB tools (research/demo/visual/pdf; adjudicated with the
 	// user: quiz/ask/fs/plan/probe_done are always-on).
-	if (isSubscriptionProvider(conversation.provider)) requestCycle = new SubscriptionRequestCycle({
-		initialMessages: asAgentMessages(merged),
-		staged: stagedAutomatic ? asAgentMessages(appends) : undefined,
-		foregroundOwed: !callPurpose.background,
-		purpose: callPurpose,
-		scopeCurrent: (scope) => connectionScopeCurrent(conversation.provider, scope),
-		commitStaged: () => {
-			stores.chatStore.saveMessages(chatId, merged);
-			persistBaseCount = merged.length;
-			noteSteersDurable(chatId, merged);
-		},
-		restoreAutomatic: (automaticIds, retainedIds) => restoreUncommittedAutomatic(chatId, constructed, automaticIds, retainedIds),
-	});
-	const agentOpts: AgentBuildOptions = {
-		engine,
-		callPurpose,
-		requestCycle,
-		messages: asAgentMessages(merged),
-		onUsage: collectUsage,
-		toolToggles: effective.agent.tools,
-		// Debug (owner, 2026-10-04): teacher/prober raw provider events under
-		// LH_PROVIDER_EVENTS=1 (provider-events.ts); no-op otherwise.
-		chatId,
-		// The prompt-override switches (P2, 2026-09-19): same resolution
-		// point as the tool delta — the agent layer composes the system
-		// prompt fresh per turn, swapping in any enabled override segments.
-		promptSwitches: effective.agent.prompts,
-	};
-	// PRACTICE BRANCH (owner design, 2026-10-04): a kind:"practice"
-	// session builds the practitioner from turn 1 — no prober→teacher
-	// split, no plan/question/job tools; the whole registry is
-	// problem + conclude. buildAgent stays honored (the test seam is
-	// uniform across kinds).
-	const constructed: TeachingAgent = buildAgent
-		? buildAgent({ ...agentOpts, teaching })
-		: record.kind === "practice"
-			? createPracticeAgent(
-					{
-						chatId,
-						chatStore: stores.chatStore,
-						// TARGET VALIDATION (owner round 9): the practice tools read the
-						// WHOLE graph fresh per pose — targets validate against every
-						// proposition, not just the session's picks (pickless sessions
-						// and future graph-tools poses stay valid).
-						graphNodes: () => stores.graphStore.readNodes(),
-						// THE RARELY-NEEDED SET (owner round 10): research + pdf jobs
-						// (same runner/gating as the teacher's — research honestly
-						// absent when no engine is live) and the map readers behind
-						// the SAME settings gate as the prober's.
-						jobs: {
+	// CONSTRUCTION COMPENSATION (fork audit C5): the request-cycle
+	// and agent factories run between beginTurn and the streaming
+	// try{} — a synchronous throw here used to escape with the turn
+	// registry held, locking the chat with 409s until the TTL eviction.
+	// Release the claim before rethrowing; the write-ahead is already
+	// durable, so the input stays honestly retryable.
+	let constructed: TeachingAgent;
+	try {
+		if (isSubscriptionProvider(conversation.provider)) requestCycle = new SubscriptionRequestCycle({
+			initialMessages: asAgentMessages(merged),
+			staged: stagedAutomatic ? asAgentMessages(appends) : undefined,
+			foregroundOwed: !callPurpose.background,
+			purpose: callPurpose,
+			scopeCurrent: (scope) => connectionScopeCurrent(conversation.provider, scope),
+			commitStaged: () => {
+				stores.chatStore.saveMessages(chatId, merged);
+				persistBaseCount = merged.length;
+				noteSteersDurable(chatId, merged);
+			},
+			restoreAutomatic: (automaticIds, retainedIds) => restoreUncommittedAutomatic(chatId, constructed, automaticIds, retainedIds),
+		});
+		const agentOpts: AgentBuildOptions = {
+			engine,
+			callPurpose,
+			requestCycle,
+			messages: asAgentMessages(merged),
+			onUsage: collectUsage,
+			toolToggles: effective.agent.tools,
+			// Debug (owner, 2026-10-04): teacher/prober raw provider events under
+			// LH_PROVIDER_EVENTS=1 (provider-events.ts); no-op otherwise.
+			chatId,
+			// The prompt-override switches (P2, 2026-09-19): same resolution
+			// point as the tool delta — the agent layer composes the system
+			// prompt fresh per turn, swapping in any enabled override segments.
+			promptSwitches: effective.agent.prompts,
+		};
+		// PRACTICE BRANCH (owner design, 2026-10-04): a kind:"practice"
+		// session builds the practitioner from turn 1 — no prober→teacher
+		// split, no plan/question/job tools; the whole registry is
+		// problem + conclude. buildAgent stays honored (the test seam is
+		// uniform across kinds).
+		constructed = buildAgent
+			? buildAgent({ ...agentOpts, teaching })
+			: record.kind === "practice"
+				? createPracticeAgent(
+						{
 							chatId,
+							chatStore: stores.chatStore,
+							// TARGET VALIDATION (owner round 9): the practice tools read the
+							// WHOLE graph fresh per pose — targets validate against every
+							// proposition, not just the session's picks (pickless sessions
+							// and future graph-tools poses stay valid).
+							graphNodes: () => stores.graphStore.readNodes(),
+							// THE RARELY-NEEDED SET (owner round 10): research + pdf jobs
+							// (same runner/gating as the teacher's — research honestly
+							// absent when no engine is live) and the map readers behind
+							// the SAME settings gate as the prober's.
+							jobs: {
+								chatId,
+								jobStore: stores.jobStore,
+								spawn: (job, input) => void jobRunner.runJob(job.id, input),
+								searchAvailable,
+							},
+							...(graphToolsEnabled(effective) ? { graph: { chatStore: stores.chatStore, graphStore: stores.graphStore } } : {}),
+						},
+						agentOpts,
+					)
+				: teaching
+				? createTeacherAgent(
+						{
+							chatId,
+							chatStore: stores.chatStore,
+							jobStore: stores.jobStore,
+							spawn: (job, input) => void jobRunner.runJob(job.id, input),
+							// The registry drop's signal (2026-09-20): no live engine
+							// = no research tool in the teacher's registry.
+							searchAvailable,
+						},
+						agentOpts,
+					)
+				: createProberAgent(
+						{
+							chatId,
+							chatStore: stores.chatStore,
+							deliver: (steer) => void deliverJobResult(steer),
+							// Fix wave (2026-09-20): the prober carries research + pdf
+							// dispatch (owner ruling — phase-omnipresent), so its ctx
+							// needs the same job wiring as the teacher's.
 							jobStore: stores.jobStore,
 							spawn: (job, input) => void jobRunner.runJob(job.id, input),
 							searchAvailable,
+							// The map reader (wave 7): the prober reads the learner's
+							// knowledge graph through tools when the gate opens —
+							// graph master switch AND the agent.graphTools toggle.
+							...(graphToolsEnabled(effective) ? { graphStore: stores.graphStore } : {}),
 						},
-						...(graphToolsEnabled(effective) ? { graph: { chatStore: stores.chatStore, graphStore: stores.graphStore } } : {}),
-					},
-					agentOpts,
-				)
-			: teaching
-			? createTeacherAgent(
-					{
-						chatId,
-						chatStore: stores.chatStore,
-						jobStore: stores.jobStore,
-						spawn: (job, input) => void jobRunner.runJob(job.id, input),
-						// The registry drop's signal (2026-09-20): no live engine
-						// = no research tool in the teacher's registry.
-						searchAvailable,
-					},
-					agentOpts,
-				)
-			: createProberAgent(
-					{
-						chatId,
-						chatStore: stores.chatStore,
-						deliver: (steer) => void deliverJobResult(steer),
-						// Fix wave (2026-09-20): the prober carries research + pdf
-						// dispatch (owner ruling — phase-omnipresent), so its ctx
-						// needs the same job wiring as the teacher's.
-						jobStore: stores.jobStore,
-						spawn: (job, input) => void jobRunner.runJob(job.id, input),
-						searchAvailable,
-						// The map reader (wave 7): the prober reads the learner's
-						// knowledge graph through tools when the gate opens —
-						// graph master switch AND the agent.graphTools toggle.
-						...(graphToolsEnabled(effective) ? { graphStore: stores.graphStore } : {}),
-					},
-					agentOpts,
-				);
+						agentOpts,
+					);
+
+	} catch (err) {
+		endTurn(chatId);
+		throw err;
+	}
 
 	// A test-injected agent gets no usage collector (tests assert the
 	// transcript, not the money channel); when it's ours, usage flows through
