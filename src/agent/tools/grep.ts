@@ -6,7 +6,9 @@ import { serverExecute } from "../tool-execute.ts";
 import {
 	capOutput,
 	formatSize,
+	GREP_MATCH_LINE_CHARS,
 	GREP_MAX_LINE_LENGTH,
+	GREP_MAX_PATTERN_CHARS,
 	isBinaryFile,
 	matchGlob,
 	MAX_OUTPUT_BYTES,
@@ -49,10 +51,14 @@ const grepInput = Type.Object({
 export const grepTool: AgentTool<typeof grepInput> = {
 	name: "grep",
 	label: "grep",
-	description: `Search file contents for a pattern. Returns matching lines with file paths and line numbers. Ignores node_modules, .git, and Library directories. Output is truncated to ${DEFAULT_LIMIT} matches or ${formatSize(MAX_OUTPUT_BYTES)} (whichever is hit first). Long lines are truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
+	description: `Search file contents for a pattern. Returns matching lines with file paths and line numbers. Ignores node_modules, .git, and Library directories. Output is truncated to ${DEFAULT_LIMIT} matches or ${formatSize(MAX_OUTPUT_BYTES)} (whichever is hit first). Lines are matched on their first ${GREP_MATCH_LINE_CHARS} chars and printed truncated to ${GREP_MAX_LINE_LENGTH} chars.`,
 	parameters: grepInput,
 	execute: serverExecute("grep", grepInput, async (input, ctx) => {
 		if (ctx?.signal?.aborted) return "Operation aborted";
+		// Fork audit C11: bound the regex input surface up front.
+		if (input.pattern.length > GREP_MAX_PATTERN_CHARS) {
+			throw new Error(`Pattern too long (${GREP_MAX_PATTERN_CHARS} chars max) — narrow the search`);
+		}
 		const searchPath = resolveSourcePath(input.path);
 
 		let stat;
@@ -138,7 +144,15 @@ export const grepTool: AgentTool<typeof grepInput> = {
 				: path.basename(filePath);
 
 			for (let i = 0; i < lines.length; i++) {
-				if (regex.test(lines[i]!)) {
+				// Fork audit C11: check the deadline INSIDE long files (the old
+				// per-file check let one huge file pin the scan past its budget),
+				// and never feed the regex more than GREP_MATCH_LINE_CHARS of a
+				// line — backtracking cost scales with match input length.
+				if ((i & 0xff) === 0 && Date.now() > scanDeadline) {
+					scanTimedOut = true;
+					break;
+				}
+				if (regex.test(lines[i]!.slice(0, GREP_MATCH_LINE_CHARS))) {
 					if (matchCount >= effectiveLimit) {
 						limitReached = true;
 						break;
