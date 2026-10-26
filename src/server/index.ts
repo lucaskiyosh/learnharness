@@ -45,3 +45,8 @@ export * from "./observability.ts";
 export * from "./model-catalog.ts";
 export { subscriptionControlsResponse, subscriptionBrowserResponse } from "./web-subscription-http.ts";
 export { sessionCost } from "./pricing.ts";
+// LAN mode (fork, audit C6 part 2): the token boot + the access bootstrap
+// share the desktop capability gate. Importing the barrel arms the gate
+// before the first request (the keys.ts fill-gap precedent).
+export { ensureLanAccessToken } from "./lan-access.ts";
+export { desktopAPIAuthorized } from "./desktop-access.ts";
