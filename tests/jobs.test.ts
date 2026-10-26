@@ -460,7 +460,7 @@ function fakeDeliver() {
 		deliver: async (steer: SteerMessage) => {
 			steers.push(steer);
 			const job = jobStore.getJob((steer.details as { jobId: string }).jobId)!;
-			chatStore.saveMessages(job.chatId, [...chatStore.getChat(job.chatId)!.messages, steer]);
+			chatStore.updateChat(job.chatId, (fresh) => ({ ...fresh, messages: [...chatStore.getChat(job.chatId)!.messages, steer] }));
 			noteSteersDurable(job.chatId, [steer]);
 		},
 	};
@@ -472,7 +472,7 @@ function setTurnRunner(run: TurnRunner): void {
 		const status = await run(chatId, input);
 		if (status === 200 && input.type === "steers") {
 			const record = chatStore.getChat(chatId);
-			if (record) chatStore.saveMessages(chatId, [...record.messages, ...input.steers.filter((s) => !steerDelivered(record.messages, s.id))]);
+			if (record) chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...record.messages, ...input.steers.filter((s) => !steerDelivered(record.messages, s.id))] }));
 		}
 		return status;
 	});
@@ -599,7 +599,7 @@ describe("research runner (async protocol §3)", () => {
 
 		// A dispatched research part in the stored chat (the input is also
 		// what the runner falls back to on a crash-recovery re-spawn).
-		chatStore.saveMessages(chat.id, nativeToolMessages("which sigma version?", "research", "call-run1", RESEARCH_INPUT));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("which sigma version?", "research", "call-run1", RESEARCH_INPUT) }));
 
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-run1" });
 		trackJob(job.id);
@@ -635,7 +635,7 @@ describe("research runner (async protocol §3)", () => {
 		const input = { question: `Verify ${url}` };
 		const chat = chatStore.createChat("Test: keyless fetch-only research");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("verify supplied URL", "research", "call-keyless", input));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("verify supplied URL", "research", "call-keyless", input) }));
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-keyless" });
 		trackJob(job.id);
 		const delivery = fakeDeliver();
@@ -669,7 +669,7 @@ describe("research runner (async protocol §3)", () => {
 	it("a failing runner still steers (the teacher learns the outcome) and the job lands error", async () => {
 		const chat = chatStore.createChat("Test: runner failure");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("hi", "research", "call-err1", RESEARCH_INPUT));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("hi", "research", "call-err1", RESEARCH_INPUT) }));
 
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-err1" });
 		trackJob(job.id);
@@ -700,7 +700,7 @@ describe("research runner (async protocol §3)", () => {
 	it("runJob resolves the input from the transcript when dispatch-time input is absent (crash recovery)", async () => {
 		const chat = chatStore.createChat("Test: transcript input fallback");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("go", "research", "call-fb1", RESEARCH_INPUT));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("go", "research", "call-fb1", RESEARCH_INPUT) }));
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-fb1" });
 		trackJob(job.id);
 
@@ -765,7 +765,7 @@ describe("pdf runner (sources v0)", () => {
 	it("runJob completes a pdf job: brief + pagesConsulted land on the record, citation steer delivered", async () => {
 		const chat = chatStore.createChat("Test: pdf runner");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("read this pdf", "pdf", "call-pdf1", PDF_INPUT));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("read this pdf", "pdf", "call-pdf1", PDF_INPUT) }));
 
 		const job = jobStore.createJob({ kind: "pdf", chatId: chat.id, toolCallId: "call-pdf1" });
 		trackJob(job.id);
@@ -802,7 +802,7 @@ describe("pdf runner (sources v0)", () => {
 			const input = { ...PDF_INPUT, path: relativePath };
 			const messages = nativeToolMessages("read this pdf", "pdf", toolCallId, input);
 			const before = structuredClone(messages);
-			chatStore.saveMessages(chat.id, messages);
+			chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: messages }));
 			const job = jobStore.createJob({ kind: "pdf", chatId: chat.id, toolCallId });
 			trackJob(job.id);
 			const delivery = fakeDeliver();
@@ -905,7 +905,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 	function setup(kind: "research" | "demo" = "research"): { chatId: string; jobId: string; steer: SteerMessage } {
 		const chat = chatStore.createChat("Test: wake pipeline");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, [{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never] }));
 
 		const job = jobStore.createJob({ kind, chatId: chat.id, toolCallId: `call-${jobStore.listJobs(chat.id).length}` });
 		trackJob(job.id);
@@ -921,7 +921,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 		// The concluded probe: a persisted probe_done call + result (the
 		// native seam the chat-handler's construction branch keys on) and no
 		// open question.
-		chatStore.saveMessages(chat.id, nativeToolMessages("teach me calc", "probe_done", "call-pd", { ok: true }));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("teach me calc", "probe_done", "call-pd", { ok: true }) }));
 		const handoff = buildProbeHandoffSteer(chat.id);
 		let seen: { chatId: string; steers: SteerMessage[] } | undefined;
 		setTurnRunner(async (cid, input) => {
@@ -942,7 +942,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 		trackChat(chat.id);
 		const handoff = buildProbeHandoffSteer(chat.id);
 		// The transcript already carries the steer (a previous wake completed).
-		chatStore.saveMessages(chat.id, [handoff as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [handoff as never] }));
 		let fired = 0;
 		setTurnRunner(async () => {
 			fired++;
@@ -951,6 +951,48 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 
 		await deliverJobResult(handoff);
 		assert.equal(fired, 0, "already delivered — the pump resolves without firing a wake");
+	});
+
+	it("a handoff's HTTP 200 is not a receipt — the persisted marker is (C9)", async () => {
+		const chat = chatStore.createChat("Test: handoff 200 is not a receipt");
+		trackChat(chat.id);
+		const handoff = buildProbeHandoffSteer(chat.id);
+		let fired = 0;
+		let persist = false;
+		// RAW runner: the file's setTurnRunner helper models canonical
+		// acceptance (it persists on 200) — this test needs the raw wire,
+		// a wake whose 200 carries NO persist.
+		setRawTurnRunner(async (cid, input) => {
+			fired++;
+			if (persist) {
+				const steers = (input as SteerInput).steers as SteerMessage[];
+				chatStore.updateChat(cid, (fresh) => ({ ...fresh, messages: [...fresh.messages, ...steers] }));
+				noteSteersDurable(cid, chatStore.getChat(cid)!.messages);
+			}
+			return 200;
+		});
+
+		// First wake: 200, nothing persisted — under the old semantics the
+		// handoff was completed HERE and a later persist failure lost it.
+		const first = deliverJobResult(handoff);
+		await waitFor(() => fired === 1, 8000, "first wake fired");
+		await new Promise((resolve) => setTimeout(resolve, 250));
+		assert.equal(chatStore.getChat(chat.id)!.messages.some((m) => (m as { id?: string }).id === handoff.id), false, "nothing persisted yet");
+		// The entry stays pending (a failed-ish start defers, never drops).
+
+		// The learner's next run re-arms the deferred handoff; the next wake
+		// persists the marker — and only that completes the delivery.
+		const agent = { steer: (_m: SteerMessage) => {} };
+		registerLiveAgent(chat.id, agent as never);
+		unregisterLiveAgent(chat.id);
+		persist = true;
+		const again = deliverJobResult(handoff); // dedups onto the same entry + re-pumps
+		await Promise.all([first, again]);
+		assert.equal(fired, 2, "the undelivered handoff re-fired on the next wake");
+		assert.ok(
+			chatStore.getChat(chat.id)!.messages.some((m) => (m as { id?: string }).id === handoff.id),
+			"the handoff marker persisted — the durable receipt",
+		);
 	});
 
 	it("delivers: fires the turn runner with the record + steer, then flips the job done", async () => {
@@ -982,7 +1024,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 
 		// A dangling question call blocks the wake (the model would reject an
 		// unanswered tool call — fork 1: the record ends at the call).
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never,
 			{
 				id: "a1",
@@ -995,7 +1037,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 				stopReason: "toolUse",
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 
 		// The delivery promise floats while the quiz blocks — awaiting it now
 		// would deadlock the test (the pump defers until the gate opens).
@@ -1008,7 +1050,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 
 		// The learner answers: the real tool result clears the dangling call.
 		const record = chatStore.getChat(chatId)!;
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			...record.messages,
 			{
 				id: "r1",
@@ -1020,7 +1062,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 				isError: false,
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 
 		await waitFor(() => fired > 0, 8000, "wake after the quiz answer");
 		await delivery; // now it resolves — the steer was delivered
@@ -1039,7 +1081,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 		// The record ends in a DISMISSAL (owner design 2026-10-03): the
 		// question was skipped via the silent route — no dangling call (the
 		// quiz gate would pass), so ONLY the dismissal pause holds the wake.
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never,
 			{
 				id: "a1",
@@ -1062,7 +1104,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 				isError: false,
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 
 		const delivery = deliverJobResult(steer);
 
@@ -1074,7 +1116,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 		// settlement re-pump lands the held delivery right after it.
 		const record = chatStore.getChat(chatId)!;
 		const afterUser = [...record.messages, { id: "u2", role: "user", content: "moving on", timestamp: 2 } as never];
-		chatStore.saveMessages(chatId, afterUser);
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: afterUser }));
 		settleSteers(chatId, afterUser);
 
 		await waitFor(() => fired > 0, 8000, "wake after the pause lifts");
@@ -1101,7 +1143,7 @@ describe("wake pipeline (src/server/jobs.ts)", () => {
 		const { chatId, jobId, steer } = setup();
 		// Simulate the crash window: the wake completed but the flip didn't.
 		const record = chatStore.getChat(chatId)!;
-		chatStore.saveMessages(chatId, [...record.messages, steer] as never);
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...record.messages, steer] as never }));
 
 		let fired = 0;
 		setTurnRunner(async () => {
@@ -1181,7 +1223,7 @@ describe("Wave C: live steering handoff + settlement reconciliation", () => {
 	it("a probe-handoff NEVER rides a live run — it waits the turn out and wakes", async () => {
 		const chat = chatStore.createChat("Test: handoff never live");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("teach me calc", "probe_done", "call-pd", { ok: true }));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("teach me calc", "probe_done", "call-pd", { ok: true }) }));
 		const handoff = buildProbeHandoffSteer(chat.id);
 		const { handed, agent } = fakeAgent();
 		const fired: SteerMessage[][] = [];
@@ -1218,7 +1260,7 @@ describe("Wave C: live steering handoff + settlement reconciliation", () => {
 
 		// A dangling question has the pump parked in waitForIdle: the
 		// marker is pending but no live run exists to take it.
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			...nativeToolMessages("teach me", "probe_done", "call-q", { ok: true }),
 			{
 				id: "a-q",
@@ -1231,7 +1273,7 @@ describe("Wave C: live steering handoff + settlement reconciliation", () => {
 				stopReason: "toolUse",
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 		const delivery = deliverJobResult(steer);
 		await delay(300); // let the pump park behind the dangling question
 		assert.equal(handed.length, 0, "nothing to hand to — no live agent");
@@ -1258,7 +1300,7 @@ describe("Wave C: live steering handoff + settlement reconciliation", () => {
 		const { chatId, jobId, steer } = setup();
 		assert.equal(jobStore.getJob(jobId)!.status, "done");
 		assert.equal(jobStore.getJob(jobId)!.delivery?.status, "pending");
-		chatStore.saveMessages(chatId, [...chatStore.getChat(chatId)!.messages, steer]);
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...chatStore.getChat(chatId)!.messages, steer] }));
 		noteSteersDurable(chatId, [steer]);
 		noteSteersDurable(chatId, [steer]);
 		assert.equal(jobStore.getJob(jobId)!.delivery?.status, "delivered");
@@ -1345,9 +1387,9 @@ describe("persistTurn (native history, Wave B)", () => {
 	it("baseCount slices the turn's own messages (the agent's state is append-only across turns)", () => {
 		const chat = chatStore.createChat("Test: persist slices the turn tail");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			{ id: "base_1", role: "user", content: "first", timestamp: 1 } as never,
-		]);
+		] }));
 		// The agent's state at onFinish: the base record + the turn's OWN new
 		// messages (Wave B: onFinish receives the full native history — the
 		// slice keeps persist append-only).
@@ -1541,7 +1583,7 @@ describe("abort (src/server/jobs.ts abortJob)", () => {
 		const chat = chatStore.createChat(`Test: ${label}`);
 		trackChat(chat.id);
 		// Native fixture — the record is agent history (Wave B).
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			{ id: "u1", role: "user", content: "hi", timestamp: 1 } as never,
 			{
 				id: "a1",
@@ -1567,7 +1609,7 @@ describe("abort (src/server/jobs.ts abortJob)", () => {
 				isError: false,
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId });
 		trackJob(job.id);
 		return { chatId: chat.id, jobId: job.id };
@@ -1645,7 +1687,7 @@ describe("abort (src/server/jobs.ts abortJob)", () => {
 	it("a finished worker with a queued result is no longer abortable", async () => {
 		const chat = chatStore.createChat("Test: abort delivering job");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, [{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never] }));
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-abort3" });
 		trackJob(job.id);
 		const result: ResearchResult = { brief: "Done: it works.", sources: [{ title: "s", url: "https://x.test" }] };
@@ -1707,7 +1749,7 @@ describe("stale-job recovery sweep (liveness-gated)", () => {
 	function orphanJob(withResult?: ResearchResult): { chatId: string; jobId: string } {
 		const chat = chatStore.createChat("Test: stale sweep");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, [{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never] }));
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: `call-sweep-${createdJobs.length}` });
 		trackJob(job.id);
 		if (withResult) jobStore.updateJob(job.id, { result: withResult, activity: "delivering result" });
@@ -1777,7 +1819,7 @@ describe("BYOK job refusal (no factory floor)", () => {
 	it("runJob with NO resolvable engine lands the job as error — the envelope wording, no phantom run", async () => {
 		const chat = chatStore.createChat("Test: unconfigured spawn");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("hi", "research", "call-nc1", RESEARCH_INPUT));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("hi", "research", "call-nc1", RESEARCH_INPUT) }));
 
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-nc1" });
 		trackJob(job.id);
@@ -1813,7 +1855,7 @@ describe("provider-key job refusal (key-presence interlude)", () => {
 	it("an engine whose provider key is gone refuses the spawn — envelope wording, no phantom run", async () => {
 		const chat = chatStore.createChat("Test: keyless spawn");
 		trackChat(chat.id);
-		chatStore.saveMessages(chat.id, nativeToolMessages("hi", "research", "call-km1", RESEARCH_INPUT));
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: nativeToolMessages("hi", "research", "call-km1", RESEARCH_INPUT) }));
 
 		const job = jobStore.createJob({ kind: "research", chatId: chat.id, toolCallId: "call-km1" });
 		trackJob(job.id);

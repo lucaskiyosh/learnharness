@@ -44,7 +44,7 @@ after(() => {
  *  the settled state a mid-turn dismissal parks against. */
 function chatWithDanglingQuiz(id: string): string {
 	const chat = chatStore.createChat("park: dangling quiz");
-	chatStore.saveMessages(chat.id, [{
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{
 		id: newMessageId(),
 		role: "assistant",
 		content: [
@@ -56,7 +56,7 @@ function chatWithDanglingQuiz(id: string): string {
 				arguments: { question: "What is a cyclic group?" },
 			},
 		],
-	} as never]);
+	} as never] }));
 	return chat.id;
 }
 
@@ -76,7 +76,7 @@ function chatWithActiveProblem(): string {
 			},
 		],
 	} as never;
-	chatStore.saveMessages(chat.id, [assistant]);
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [assistant] }));
 	return chat.id;
 }
 

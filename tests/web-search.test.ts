@@ -265,7 +265,7 @@ import type { ChatStore } from "../src/core/ports.ts";
  *  time (quiz/plan superRefines read it at execute time, never here). */
 const fakeChatStore = {
 	getChat: () => null,
-	saveMessages: () => {},
+	updateChat: () => ({ messages: [] }) as never,
 } as unknown as ChatStore;
 
 const ctxBase = { chatId: "chat-gate-test", chatStore: fakeChatStore };

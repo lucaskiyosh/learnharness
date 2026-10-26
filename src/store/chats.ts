@@ -26,9 +26,9 @@ function chatFile(id: string): string {
 
 /** THE SILENCE LAW (push S6, 2026-10-02): chats-changed announces ONLY
  *  list-SHAPE mutations — createChat, renameChat, deleteChat (below,
- *  each emits post-write). The content writers (saveMessages,
+ *  each emits post-write). The content writers (updateChat,
  *  appendTurnUsage, appendExtractionUsage, saveSettings, saveTree) are
- *  DELIBERATELY SILENT: saveMessages fires per turn-persist and would
+ *  DELIBERATELY SILENT: updateChat fires per turn-persist and would
  *  spam the bus, and every list-visible change it causes (title, order,
  *  phase, busy, pendingQuestion) is already announced by turn-started /
  *  turn-settled, which the sidebar refetches on. Silence here is law,
@@ -124,15 +124,17 @@ function listChats(): ChatSummary[] {
 	}
 }
 
-/** Persist the full native message list (the record IS the agent state —
- *  Wave B: replay is state.messages = record.messages). SILENT by the
- *  events law — see the SILENCE LAW comment at createChat. */
-function saveMessages(id: string, messages: LhMessage[]): void {
-	const record = getChat(id);
-	if (!record) throw new Error(`Chat not found: ${id}`);
-	record.messages = messages;
-	record.updatedAt = new Date().toISOString();
-	writeChat(record);
+/** THE RECORD UPDATE SEAM (fork audit C1/C2): read fresh, run the patch
+ * synchronously, persist crash-atomically. The record IS the agent state
+ * (Wave B) — and no caller can write a stale snapshot over concurrent
+ * writes anymore, because the patch always sees the latest record. */
+function updateChat(id: string, patch: (fresh: ChatRecord) => ChatRecord): ChatRecord {
+	const fresh = getChat(id);
+	if (!fresh) throw new Error(`Chat not found: ${id}`);
+	const next = patch(fresh);
+	next.updatedAt = new Date().toISOString();
+	writeChat(next);
+	return next;
 }
 
 /** Append one usage entry to the record's turn log — idempotent per
@@ -205,7 +207,7 @@ function saveTree(id: string, tree: PlanTree): void {
 	if (!record) throw new Error(`Chat not found: ${id}`);
 	record.tree = tree;
 	// Deliberately does NOT bump updatedAt: tree mutations piggyback on the
-	// turn's saveMessages, and sidebar ordering shouldn't churn on tree edits.
+	// turn's record update, and sidebar ordering shouldn't churn on tree edits.
 	writeChat(record);
 }
 
@@ -213,7 +215,7 @@ export const chatStore: ChatStore = {
 	createChat,
 	getChat,
 	listChats,
-	saveMessages,
+	updateChat,
 	saveTree,
 	saveSettings,
 	renameChat,

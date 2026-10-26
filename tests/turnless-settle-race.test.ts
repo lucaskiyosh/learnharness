@@ -36,7 +36,7 @@ const OTHER_CALL_ID = "call-c2-other";
 /** A record whose newest assistant message poses an unanswered quiz. */
 function chatWithDanglingQuiz(): string {
 	const chat = chatStore.createChat("turnless x settle race");
-	chatStore.saveMessages(chat.id, [
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 		newUserMessage("teach me something"),
 		{
 			id: newMessageId(),
@@ -46,7 +46,7 @@ function chatWithDanglingQuiz(): string {
 				{ type: "toolCall", id: QUIZ_CALL_ID, name: "quiz", arguments: { question: "What is a cyclic group?" } },
 			],
 		} as never,
-	]);
+	] }));
 	return chat.id;
 }
 
@@ -73,8 +73,10 @@ describe("dismiss x settle race (C2)", () => {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body,
+				// undici streaming bodies need duplex; the DOM RequestInit
+				// type predates it — a narrow, honest cast.
 				duplex: "half",
-			}),
+			} as RequestInit & { duplex: "half" }),
 			{ params: Promise.resolve({ id: chatId }) },
 		);
 

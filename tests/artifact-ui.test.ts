@@ -35,7 +35,7 @@ before(async () => {
 	createChat = server.createChat;
 	getChat = server.getChat as typeof getChat;
 	const { chatStore } = await import("../src/store/chats.ts");
-	saveMessages = (id, messages) => chatStore.saveMessages(id, messages as never);
+	saveMessages = (id, messages) => { chatStore.updateChat(id, (record) => ({ ...record, messages: messages as never })); };
 	const contracts = await import("../src/core/contracts.ts");
 	buildSubagentSteerFn = contracts.buildSubagentSteer;
 });

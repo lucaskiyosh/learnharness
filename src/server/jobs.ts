@@ -592,14 +592,14 @@ async function pump(chatId: string): Promise<void> {
 			}
 			attempt = 0;
 			for (const entry of owned) {
-				if (status === 200 && !jobIdOf(entry.steer)) {
-					// Preserve the non-job probe handoff's acceptance semantics.
-					completeEntry(chatId, entry);
-				} else if (status !== 200 || !isTurnRunning(chatId)) {
+				if (status !== 200 || !isTurnRunning(chatId)) {
 					deferOrReject(chatId, entry, new Error(`wake turn did not persist steer (status ${status})`));
 				}
-				// An accepted live turn still owns its cargo until canonical save
-				// or settlement. HTTP 200 alone is not a durable marker receipt.
+				// Every steer — probe handoffs included (fork audit C9) — stays
+				// owned until canonical save: the wake's write-ahead persists the
+				// marker and noteSteersDurable completes the entry right there.
+				// HTTP 200 alone is not a durable marker receipt; a wake whose
+				// turn failed to persist retries instead of losing the handoff.
 			}
 		}
 	} finally {
@@ -636,7 +636,11 @@ state().stopConnectionWatch = onSubscriptionChange(() => {
 function deferOrReject(chatId: string, entry: QueuedSteer, error: Error): void {
 	entry.waking = false;
 	entry.wakeAgent = undefined;
-	if (jobIdOf(entry.steer)) {
+	// Fork audit C9: probe handoffs ride the same failed-start law as job
+	// steers — pending until a learner run or process restart, never dropped
+	// (they are memory-only, but dropping one meant the teacher's wake never
+	// came without any trace).
+	if (jobIdOf(entry.steer) || entry.steer.customType === "probe-handoff") {
 		entry.deferred = true;
 		console.error(`[steer ${entry.steer.id}] delivery remains pending:`, error.message);
 	} else {

@@ -333,7 +333,7 @@ describe("send_to_user native flow (offline)", () => {
 		]);
 		const chat = chatStore.createChat("Synthetic native output flow");
 		const user = newUserMessage("Explain synthetic arithmetic.");
-		chatStore.saveMessages(chat.id, [user]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [user] }));
 		const agent = createTeacherAgent(undefined, { engine, messages: asAgentMessages([user]) });
 		const handle = runPiTurn({
 			agent,

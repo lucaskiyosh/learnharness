@@ -195,7 +195,7 @@ function planPart(toolCallId: string, name: string, input: Record<string, unknow
 function fixtureChat() {
 	const chat = chatStore.createChat("Extraction fixture");
 	createdChats.push(chat.id);
-	chatStore.saveMessages(chat.id, [
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 		user("u1", "teach me the chain rule"),
 		...assistant("a1", [
 			{ type: "text", text: "The chain rule composes rates of change along a path." },
@@ -219,7 +219,7 @@ function fixtureChat() {
 				answeredAt: "2026-08-22T02:00:00.000Z",
 			}),
 		]),
-	].flat());
+	].flat() }));
 	return { chatId: chat.id, record: chatStore.getChat(chat.id)! };
 }
 
@@ -368,7 +368,7 @@ describe("transcriptView (pure — teacher prose only, owner 2026-09-28)", () =>
 	it("job tool results and empty text vanish — only prose paragraphs remain", () => {
 		const chat = chatStore.createChat("View noise fixture");
 		createdChats.push(chat.id);
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			user("u1", "go"),
 			...assistant("a1", [
 				{
@@ -380,7 +380,7 @@ describe("transcriptView (pure — teacher prose only, owner 2026-09-28)", () =>
 				{ type: "text", text: "   " },
 				{ type: "text", text: "Prose survives." },
 			]),
-		].flat());
+		].flat() }));
 		const view = transcriptView(chatStore.getChat(chat.id)!);
 		assert.match(view, /^TEACHER \[a1\] Prose survives\.$/m, "the surviving passage is labeled with its real id");
 		assert.doesNotMatch(view, /research/);
@@ -1712,10 +1712,7 @@ function chunkyChat() {
 	// the fourth would overflow — deterministic batches [m1,m2,m3] + [m4,m5].
 	// Teacher prose only (owner, 2026-09-28): learner messages are
 	// invisible to coverage, so the fixture is all-teacher.
-	chatStore.saveMessages(
-		chat.id,
-		[1, 2, 3, 4, 5].flatMap((n) => assistant(`a${n}`, [{ type: "text", text: `topic ${n}: ${"detail ".repeat(700)}${n}` }])),
-	);
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [1, 2, 3, 4, 5].flatMap((n) => assistant(`a${n}`, [{ type: "text", text: `topic ${n}: ${"detail ".repeat(700)}${n}` }])), }));
 	return { chatId: chat.id, record: chatStore.getChat(chat.id)! };
 }
 
@@ -1850,10 +1847,10 @@ describe("the chunked pipeline (extraction coverage)", () => {
 		// the ONLY thing later runs can see.
 		const chat = chatStore.createChat("Re-open fixture");
 		createdChats.push(chat.id);
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			...assistant("s1", [{ type: "text", text: "short topic one" }]),
 			...assistant("s2", [{ type: "text", text: "short topic two" }]),
-		].flat());
+		].flat() }));
 		const chatId = chat.id;
 		const ledgers = memoryLedgers();
 		const pipeline = createExtractionPipeline({
@@ -1871,10 +1868,10 @@ describe("the chunked pipeline (extraction coverage)", () => {
 		// Data parts are invisible to the extraction view — a plan-block
 		// marker append (whose data part splices into the projected view)
 		// does NOT re-open a covered message.
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			...record(),
 			newPlanBlockMessage("call_s2", { kind: "full", at: "2026-09-26T00:00:00.000Z", current: null, nodes: [], edges: [] }),
-		]);
+		] }));
 		const afterAttach = coverageOf(messages(), ledgers.readCoverage(), chatId);
 		assert.equal(afterAttach.uncoveredCount, 0, "data parts don't change the fingerprint");
 
@@ -1886,7 +1883,7 @@ describe("the chunked pipeline (extraction coverage)", () => {
 				? ({ ...m, content: [...(m as { content: unknown[] }).content, { type: "text", text: "the answer merged in late" }] } as never)
 				: m,
 		);
-		chatStore.saveMessages(chatId, mutated);
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: mutated }));
 		const afterMerge = coverageOf(messages(), ledgers.readCoverage(), chatId);
 		assert.equal(afterMerge.uncoveredCount, 1, "only the mutated message re-opens");
 

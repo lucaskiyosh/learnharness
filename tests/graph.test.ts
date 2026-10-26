@@ -157,7 +157,7 @@ function answer(over: Partial<QuestionAnswerData>): QuestionAnswerData {
 function fixtureChat(title: string, messages: LhMessage[]) {
 	const chat = chatStore.createChat(title);
 	createdChats.push(chat.id);
-	chatStore.saveMessages(chat.id, messages);
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: messages }));
 	return chatStore.getChat(chat.id)!;
 }
 

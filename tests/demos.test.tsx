@@ -794,7 +794,7 @@ describe("demo/visual job runners", () => {
 		createdChats.push(chat.id);
 		// Wave B: a NATIVE fixture (the record holds agent history) — the
 		// runner's transcript scan reads it through the projection.
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			{ id: "u1", role: "user", content: "show me compounding", timestamp: 1 } as never,
 			{
 				id: "a1",
@@ -817,7 +817,7 @@ describe("demo/visual job runners", () => {
 				isError: false,
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 
 		const job = jobStore.createJob({ kind: "demo", chatId: chat.id, toolCallId: "call-d1" });
 		createdJobs.push(job.id);
@@ -862,7 +862,7 @@ describe("demo/visual job runners", () => {
 	it("runJob still steers on visual failure and the job lands error", async () => {
 		const chat = chatStore.createChat("Test: visual runner failure");
 		createdChats.push(chat.id);
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			{ id: "u1", role: "user", content: "draw it", timestamp: 1 } as never,
 			{
 				id: "a1",
@@ -885,7 +885,7 @@ describe("demo/visual job runners", () => {
 				isError: false,
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 
 		const job = jobStore.createJob({ kind: "visual", chatId: chat.id, toolCallId: "call-v1" });
 		createdJobs.push(job.id);

@@ -58,23 +58,38 @@ export function takeParkedDismissal(chatId: string): ParkedDismissal | null {
 }
 
 /** Apply the chat's parked dismissal, if any, against the current record.
- *  Runs in the turn's onFinish — between persistTurn and endTurn, so a
- *  client reacting to "turn-settled" reads the dismissal already in the
- *  record. The append path is the route's own (dismissAppends); a
- *  ChatInputError means the dismissed thing never materialized — the park
- *  is dropped, silence is the correct outcome. Emits "record-changed"
- *  exactly when something was written. */
+ * Runs in the turn's onFinish — between persistTurn and endTurn, so a
+ * client reacting to "turn-settled" reads the dismissal already in the
+ * record. The append path is the route's own (dismissAppends), validated
+ * INSIDE the update seam's patch against the fresh record; a ChatInputError
+ * means the dismissed thing never materialized — the park is dropped,
+ * silence is the correct outcome. The park is consumed only AFTER a
+ * successful write (fork audit C14): the route's 202 promised "will land",
+ * so a failed write keeps it for the next settle instead of dropping it.
+ * Emits "record-changed" exactly when something was written. */
 export function applyParkedDismissal(chatStore: ChatStore, chatId: string): void {
-	const input = takeParkedDismissal(chatId);
-	if (input === null) return;
-	const record = chatStore.getChat(chatId);
-	if (!record) return;
+	const parked = registry().get(chatId);
+	if (parked === undefined) return;
+	if (!chatStore.getChat(chatId)) return;
 	try {
-		const appends = dismissAppends(record, input as Parameters<typeof dismissAppends>[1]);
-		chatStore.saveMessages(chatId, [...record.messages, ...appends]);
+		chatStore.updateChat(chatId, (fresh) => {
+			const appends = dismissAppends(fresh, parked as Parameters<typeof dismissAppends>[1]);
+			return { ...fresh, messages: [...fresh.messages, ...appends] };
+		});
+		registry().delete(chatId); // consumed by the successful write
 		emit("record-changed", { chatId });
 	} catch (err) {
-		if (err instanceof ChatInputError) return; // never materialized — drop
-		throw err;
+		if (err instanceof ChatInputError) {
+			registry().delete(chatId); // never materialized — drop
+			return;
+		}
+		throw err; // a write failure keeps the park for the next settle
 	}
+}
+
+/** Discard the chat's parked dismissal without applying it — the session
+ * deletion wind-down (fork audit C14): the registry must not leak entries
+ * for chats that no longer exist. */
+export function discardParkedDismissal(chatId: string): void {
+	registry().delete(chatId);
 }

@@ -87,9 +87,9 @@ describe("probe_done: the probe→planning seam", () => {
 
 	it("REFUSES while a question is still open — resolve it first", async () => {
 		const chatId = newChat("Probe: open question");
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			assistantWithCall("m1", "quiz", { question: "q?", options: [{ label: "a" }], correctAnswer: "a" }),
-		]);
+		] }));
 		const delivered: SteerMessage[] = [];
 		const tools = probeDoneTool({ chatId, chatStore, deliver: (s) => delivered.push(s) });
 
@@ -101,7 +101,7 @@ describe("probe_done: the probe→planning seam", () => {
 
 	it("REFUSES a second conclusion — probe_done fires exactly once", async () => {
 		const chatId = newChat("Probe: twice");
-		chatStore.saveMessages(chatId, [
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [
 			assistantWithCall("m1", "probe_done", { assessment: ASSESSMENT }),
 			{
 				id: "m1r",
@@ -112,7 +112,7 @@ describe("probe_done: the probe→planning seam", () => {
 				isError: false,
 				timestamp: Date.now(),
 			} as never,
-		]);
+		] }));
 		const delivered: SteerMessage[] = [];
 		const tools = probeDoneTool({ chatId, chatStore, deliver: (s) => delivered.push(s) });
 

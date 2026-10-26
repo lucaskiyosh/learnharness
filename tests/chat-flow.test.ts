@@ -827,7 +827,7 @@ describe("chat store", () => {
 	it("round-trips and lists chats", async () => {
 		const chat = chatStore.createChat("Store test");
 		createdChats.push(chat.id);
-		chatStore.saveMessages(chat.id, [{ id: "m1", role: "user", content: "hi", timestamp: 1 } as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{ id: "m1", role: "user", content: "hi", timestamp: 1 } as never] }));
 		const loaded = chatStore.getChat(chat.id)!;
 		assert.equal(loaded.messages.length, 1);
 		assert.equal(loaded.title, "Store test");
@@ -855,9 +855,9 @@ describe("canonical persistence failures", () => {
 		createdChats.push(chat.id);
 		await drainTurn(post(chat.id, { type: "text", text: "quiz me" }), agentFactory(engine));
 		const before = chatStore.getChat(chat.id)!.messages;
-		const save = chatStore.saveMessages;
+		const save = chatStore.updateChat;
 		let builds = 0;
-		chatStore.saveMessages = () => { throw new Error("synthetic write-ahead failure"); };
+		chatStore.updateChat = () => { throw new Error("synthetic write-ahead failure"); };
 		try {
 			const res = await handleChatRequest(post(chat.id, { type: "answer", toolCallId: "call-1", answer: gradedAnswer(QUIZ_INPUT, ["Mercury"]) }), (opts) => {
 				builds++;
@@ -874,7 +874,7 @@ describe("canonical persistence failures", () => {
 			assert.equal(isTurnRunning(chat.id), false);
 			assert.equal(runningTurn(chat.id), undefined);
 			assert.deepEqual(chatStore.getChat(chat.id)!.messages, before);
-		} finally { chatStore.saveMessages = save; }
+		} finally { chatStore.updateChat = save; }
 	});
 
 	it("reports a failed reply save before DONE while keeping the accepted answer durable", async () => {
@@ -882,11 +882,11 @@ describe("canonical persistence failures", () => {
 		const chat = createConfiguredChat("Test: failed reply persistence");
 		createdChats.push(chat.id);
 		await drainTurn(post(chat.id, { type: "text", text: "quiz me" }), agentFactory(engine));
-		const save = chatStore.saveMessages;
+		const save = chatStore.updateChat;
 		let writes = 0;
-		chatStore.saveMessages = (id, messages) => {
+		chatStore.updateChat = (id, patch) => {
 			if (++writes === 2) throw new Error("synthetic reply save failure");
-			return save(id, messages);
+			return save(id, patch);
 		};
 		try {
 			const body = await drainTurn(post(chat.id, { type: "answer", toolCallId: "call-1", answer: gradedAnswer(QUIZ_INPUT, ["Mercury"]) }), agentFactory(engine));
@@ -914,7 +914,7 @@ describe("canonical persistence failures", () => {
 			await missedView.continueIfOwed(snapshot.messages);
 			assert.equal(automaticPosts, 0, "the record notice must block replacement even without a stream attachment");
 			assert.equal(missedView.getState().error?.message, "The reply could not be saved.");
-		} finally { chatStore.saveMessages = save; }
+		} finally { chatStore.updateChat = save; }
 	});
 
 	it("does not redeliver a persisted learner steer after usage bookkeeping fails", async () => {
@@ -1412,7 +1412,7 @@ describe("the silent dismissal (A2)", () => {
 		assert.equal((await dismissPost("chat_nonexistent", "call-x")).status, 404);
 		const chat = createConfiguredChat("Test: dismiss no question");
 		createdChats.push(chat.id);
-		chatStore.saveMessages(chat.id, [{ id: "u1", role: "user", content: "hi", timestamp: 1 } as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{ id: "u1", role: "user", content: "hi", timestamp: 1 } as never] }));
 		assert.equal((await dismissPost(chat.id, "call-x")).status, 400);
 	});
 
@@ -1421,7 +1421,7 @@ describe("the silent dismissal (A2)", () => {
 		createdChats.push(chat.id);
 		// Two quiz calls in one assistant message (the sequential-execution
 		// shape the tools opt into).
-		chatStore.saveMessages(chat.id, [
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 			{ id: "u1", role: "user", content: "hello", timestamp: 1 } as never,
 			{
 				id: "a1",
@@ -1437,7 +1437,7 @@ describe("the silent dismissal (A2)", () => {
 				stopReason: "toolUse",
 				timestamp: 1,
 			} as never,
-		]);
+		] }));
 
 		// First dismissal completes call-a; call-b still dangles.
 		assert.equal((await dismissPost(chat.id, "call-a")).status, 200);

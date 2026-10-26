@@ -61,9 +61,9 @@ describe("chat store events (S6: the silence law)", () => {
 			if (e.type === "chats-changed") announces++;
 		});
 
-		// saveMessages: fires per turn-persist — would spam the bus during
+		// updateChat: fires per turn-persist — would spam the bus during
 		// turns; its list-visible effects arrive via turn-started/settled.
-		chatStore.saveMessages(chat.id, [{ id: "m1", role: "user", content: "hello", timestamp: 1 } as never]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [{ id: "m1", role: "user", content: "hello", timestamp: 1 } as never] }));
 		// usage appends + settings + tree: record CONTENT, not list shape.
 		chatStore.appendTurnUsage(chat.id, { id: "t1", messageId: "m1", at: "2026-10-02T00:00:00.000Z", model: "x:y", steps: [] });
 		chatStore.appendExtractionUsage(chat.id, { startedAt: 1, at: "2026-10-02T00:00:00.000Z", durationMs: 1, stages: { extractor: { model: "x:y", steps: [] }, auditor: { model: "x:y", steps: [] } } });

@@ -65,7 +65,10 @@ export async function POST(req: Request) {
 		const chainLines = chainsForSelection(pickedNodes, stores.graphStore.readChains()).map((c) =>
 			formatChainLine(c, Object.fromEntries(byId)),
 		);
-		stores.chatStore.saveMessages(chat.id, [newGraphContextMessage(picks, chainLines)]);
+		stores.chatStore.updateChat(chat.id, (fresh) => ({
+			...fresh,
+			messages: [...fresh.messages, newGraphContextMessage(picks, chainLines)],
+		}));
 	}
 	return Response.json({ id: chat.id, title: chat.title });
 }

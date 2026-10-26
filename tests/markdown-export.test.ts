@@ -31,7 +31,7 @@ before(async () => {
 	const server = await import("../src/server/chats.ts");
 	createChat = server.createChat;
 	const { chatStore } = await import("../src/store/chats.ts");
-	saveMessages = (id, messages) => chatStore.saveMessages(id, messages as never);
+	saveMessages = (id, messages) => { chatStore.updateChat(id, (record) => ({ ...record, messages: messages as never })); };
 });
 
 describe("GET /api/chats/:id/markdown", () => {

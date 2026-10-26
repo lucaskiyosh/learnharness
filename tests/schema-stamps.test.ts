@@ -49,7 +49,7 @@ test("chats: an UNSTAMPED legacy record reads fine (absence = v1) and is stamped
 	);
 	const r = chatStore.getChat(id);
 	assert.ok(r, "unstamped record reads (lazy v1)");
-	chatStore.saveMessages(id, []);
+	chatStore.updateChat(id, (fresh) => ({ ...fresh, messages: [] }));
 	const onDisk = JSON.parse(fs.readFileSync(path.join(TMP_DATA, "chats", `${id}.json`), "utf8"));
 	assert.equal(onDisk.version, 1, "the write choke point stamped it");
 });

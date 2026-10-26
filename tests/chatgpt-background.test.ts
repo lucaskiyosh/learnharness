@@ -61,7 +61,7 @@ for (const revokedAfterQueue of [false, true]) {
 		setTurnRunner(async (chatId, input) => {
 			wakes++;
 			assert.equal(input.type, "steers");
-			if (input.type === "steers") stores.chatStore.saveMessages(chatId, [...stores.chatStore.getChat(chatId)!.messages, ...input.steers]);
+			if (input.type === "steers") stores.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...stores.chatStore.getChat(chatId)!.messages, ...input.steers] }));
 			return 200;
 		});
 		assert(beginTurn(chat.id));

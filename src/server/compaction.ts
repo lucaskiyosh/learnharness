@@ -225,7 +225,11 @@ async function compact(deps: CompactionDeps, chatId: string): Promise<void> {
 			at: new Date().toISOString(),
 		};
 		const marker = newCompactionMarker(trimmed, details);
-		deps.chatStore.saveMessages(chatId, [...messages, marker]);
+		// Fork audit C1: the marker appends to the FRESH record (the update
+		// seam) — the summarize await above can span seconds of turn-less
+		// writes (dismissals, artifact toggles), and appending the stale
+		// snapshot's messages used to erase them.
+		deps.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...fresh.messages, marker] }));
 		// The money channel: the summary is a real model call on the
 		// session's own engine — its usage keys to the marker (provenance:
 		// the transcript shows the compaction divider at the marker).

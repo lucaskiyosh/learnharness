@@ -49,7 +49,7 @@ for (const p of NATIVE_SUBSCRIPTIONS) for (const revokeAfterQueue of [false, tru
 		stream.push({ type: "start", partial: output }); stream.push({ type: "done", reason: "stop", message: output }); stream.end(); return stream;
 	} });
 	let wakes = 0;
-	setTurnRunner(async (chatId, input) => { wakes++; if (input.type === "steers") stores.chatStore.saveMessages(chatId, [...stores.chatStore.getChat(chatId)!.messages, ...input.steers]); return 200; });
+	setTurnRunner(async (chatId, input) => { wakes++; if (input.type === "steers") stores.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...stores.chatStore.getChat(chatId)!.messages, ...input.steers] })); return 200; });
 	assert(beginTurn(chat.id)); registerLiveAgent(chat.id, agent); const delivered = deliverJobResult(steer);
 	assert(steerLiveChat(chat.id, { id: "fixture-live-learner", role: "user", content: "Continue my learning", timestamp: 3 } as never));
 	if (revokeAfterQueue) connection(p.providerId, false);

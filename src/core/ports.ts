@@ -39,9 +39,17 @@ export interface ChatStore {
 	getChat(id: string): ChatRecord | null;
 	/** All sessions, newest activity first (the sidebar's list view). */
 	listChats(): ChatSummary[];
-	/** Persist the full native message list (the record IS the agent
-	 * state — Wave B, owner-approved 2026-09-26). */
-	saveMessages(id: string, messages: LhMessage[]): void;
+	/** THE RECORD UPDATE SEAM (fork audit C1/C2): the one way record
+	 * content changes. `patch` runs over a FRESHLY-read record,
+	 * synchronously — no awaits between read and write (the store's
+	 * writes are sync) — and the result persists crash-atomically.
+	 * A caller holding an older snapshot across an await (compaction's
+	 * LLM call, a route's body parse) can never clobber what landed in
+	 * between: the patch always sees the latest truth. Throws when the
+	 * id is unknown (the honest-404 discipline callers already use).
+	 * Replaces the old whole-array saveMessages, which let stale
+	 * snapshots erase concurrent writes. */
+	updateChat(id: string, patch: (fresh: ChatRecord) => ChatRecord): ChatRecord;
 	/** Persist the session plan tree (plan tools call this in execute). */
 	saveTree(id: string, tree: PlanTree): void;
 	/** Append one usage entry to the record's turn log (the money channel,

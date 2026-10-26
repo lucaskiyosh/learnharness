@@ -44,7 +44,7 @@ import { beginTurn, endTurn } from "./turn-liveness.ts";
 import { applyParkedDismissal } from "./dismissal-park.ts";
 import { registerTurn, rememberTurnFailure, unregisterTurn } from "./turn-runs.ts";
 import { persistTurn, triggerExtraction, TurnPersistenceError } from "./turn-service.ts";
-import { hasProbeDone, danglingQuestionOf } from "../core/native-messages.ts";
+import { hasProbeDone, danglingQuestionOf, type LhMessage } from "../core/native-messages.ts";
 import { composeInstructions } from "../agent/teacher-agent.ts";
 import { ensureCompacted, kickCompaction, effectiveThresholdTokens } from "./compaction.ts";
 import { catalogContextLimits, refreshConnectionCatalog } from "./model-catalog.ts";
@@ -293,8 +293,7 @@ export async function handleChatInput(
 	// while a question dangles (job wakes wait, continuation folds refuse,
 	// the composer gates), so adjacency holds by construction.
 	if (input.type === "answer" && danglingQuestionOf([...record.messages, ...appends]) !== null) {
-		const merged = [...record.messages, ...appends];
-		try { stores.chatStore.saveMessages(chatId, merged); }
+		try { stores.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...fresh.messages, ...appends] })); }
 		catch (err) {
 			console.error(`[chat ${chatId}] write-ahead persist failed:`, err);
 			return new Response("Your input could not be saved. Please try again.", { status: 500 });
@@ -317,15 +316,22 @@ export async function handleChatInput(
 	// truth instead of the pre-answer record. (Wave C: the wake's markers
 	// ride this same write-ahead - the pump de-queued them at fire, so this
 	// is the ONLY copy ever appended.)
-	const merged = [...record.messages, ...appends];
 	const stagedAutomatic = isSubscriptionProvider(conversation.provider) && input.type === "steers";
+	let merged: LhMessage[] = [...record.messages, ...appends];
 	let persistBaseCount = stagedAutomatic ? record.messages.length : merged.length;
-	try {
-		if (!stagedAutomatic) stores.chatStore.saveMessages(chatId, merged);
-	} catch (err) {
-		console.error(`[chat ${chatId}] write-ahead persist failed:`, err);
-		endTurn(chatId);
-		return new Response("Your input could not be saved. Please try again.", { status: 500 });
+	if (!stagedAutomatic) {
+		try {
+			// The update seam (fork audit C2): append to the FRESH record and
+			// adopt what persisted as this turn's in-memory base — the gates
+			// above span awaits, and a pre-gate write (a dismissal landing
+			// before beginTurn) used to be silently erased here.
+			const persisted = stores.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...fresh.messages, ...appends] }));
+			merged = persisted.messages;
+		} catch (err) {
+			console.error(`[chat ${chatId}] write-ahead persist failed:`, err);
+			endTurn(chatId);
+			return new Response("Your input could not be saved. Please try again.", { status: 500 });
+		}
 	}
 	// Visibility bookkeeping is not the canonical save. Its failure must
 	// neither misreport a saved input as lost nor prevent the turn running.
@@ -391,9 +397,9 @@ export async function handleChatInput(
 			purpose: callPurpose,
 			scopeCurrent: (scope) => connectionScopeCurrent(conversation.provider, scope),
 			commitStaged: () => {
-				stores.chatStore.saveMessages(chatId, merged);
-				persistBaseCount = merged.length;
-				noteSteersDurable(chatId, merged);
+				const next = stores.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...fresh.messages, ...appends] }));
+				persistBaseCount = next.messages.length;
+				noteSteersDurable(chatId, next.messages);
 			},
 			restoreAutomatic: (automaticIds, retainedIds) => restoreUncommittedAutomatic(chatId, constructed, automaticIds, retainedIds),
 		});

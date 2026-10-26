@@ -64,8 +64,6 @@ export function persistTurn(
 	isAborted: boolean,
 ): LhMessage[] {
 	try {
-		const record = chatStore.getChat(chatId);
-		if (!record) throw new Error(`Chat not found: ${chatId}`);
 		const stamped: LhMessage[] = [];
 		for (const m of turnMessages.slice(baseCount)) {
 			const message = m as LhMessage;
@@ -79,12 +77,17 @@ export function persistTurn(
 			}
 			stamped.push(message.id ? message : ({ ...message, id: newMessageId() } as LhMessage));
 		}
-		const tree = record.tree;
-		const blocks = planBlocksFor(record.messages, stamped, tree, [
-			...record.messages,
-			...stamped,
-		]);
-		chatStore.saveMessages(chatId, [...record.messages, ...stamped, ...blocks]);
+		// The update seam (fork audit C2): the canonical append composes
+		// against the FRESH record — plan blocks derive from fresh
+		// truth, and a turn-less write that landed during the stream can
+		// no longer be erased by the turn's own settle persist.
+		chatStore.updateChat(chatId, (fresh) => {
+			const blocks = planBlocksFor(fresh.messages, stamped, fresh.tree, [
+				...fresh.messages,
+				...stamped,
+			]);
+			return { ...fresh, messages: [...fresh.messages, ...stamped, ...blocks] };
+		});
 		return stamped;
 	} catch (err) {
 		console.error(`[chat ${chatId}] persist failed:`, err, { isAborted });

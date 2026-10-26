@@ -47,7 +47,7 @@ const big = (text: string, kb = 100): LhMessage => newUserMessage(`${text}: ${"x
 function overThresholdChat(label: string): string {
 	const chat = chatStore.createChat(label);
 	const messages = [big("m1"), big("m2"), big("m3"), newUserMessage("recent")];
-	chatStore.saveMessages(chat.id, messages);
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: messages }));
 	return chat.id;
 }
 
@@ -162,7 +162,7 @@ describe("the compaction service", () => {
 		// first compaction
 		await ensureCompacted({ ...depsOf(chatId, 40_000) }, chatId);
 		// grow the record past the threshold again (post-markers + new tail)
-		chatStore.saveMessages(chatId, [...chatStore.getChat(chatId)!.messages, big("m9"), big("m10"), big("m11")]);
+		chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...chatStore.getChat(chatId)!.messages, big("m9"), big("m10"), big("m11")] }));
 		// second compaction — the span must open with the FIRST summary
 		await ensureCompacted(deps, chatId);
 		assert.ok(seenPrompt.includes("prior compaction summary"), "the prior summary rides the span");
@@ -207,7 +207,7 @@ describe("the compaction service", () => {
 	it("a usage-heavy zero cut does not spend or append a marker", async () => {
 		const chat = chatStore.createChat("no-progress fixture");
 		const assistant = { id: "measured", role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop", usage: { input: 120_000, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 120_001 }, timestamp: 1 } as LhMessage;
-		chatStore.saveMessages(chat.id, [newUserMessage("tiny visible history"), assistant]);
+		chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [newUserMessage("tiny visible history"), assistant] }));
 		const before = summarizeCalls;
 		await ensureCompacted(depsOf(chat.id, 40_000), chat.id);
 		assert.equal(summarizeCalls, before);
@@ -218,7 +218,7 @@ describe("the compaction service", () => {
 	it("starting/failing compaction preserves the meter; committing its marker clears it, regardless of summary usage", async () => {
 		const id = overThresholdChat("meter validity fixture");
 		const assistant = { id: "measured", role: "assistant", content: [{ type: "text", text: "ok" }], stopReason: "stop", usage: { input: 120_000, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 120_001 }, timestamp: 1 } as LhMessage;
-		chatStore.saveMessages(id, [...chatStore.getChat(id)!.messages, assistant]);
+		chatStore.updateChat(id, (fresh) => ({ ...fresh, messages: [...chatStore.getChat(id)!.messages, assistant] }));
 		let release!: () => void;
 		const gate = new Promise<void>((done) => { release = done; });
 		const deps = depsOf(id, 40_000);

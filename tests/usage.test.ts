@@ -66,7 +66,7 @@ test("appendTurnUsage: idempotent per turn; continuations survive saveMessages; 
 		chatStore.appendTurnUsage(record.id, entry);
 		chatStore.appendTurnUsage(record.id, { ...entry, id: "turn_2" });
 		assert.equal(chatStore.getChat(record.id)?.turns?.length, 2);
-		chatStore.saveMessages(record.id, [{ id: "msg_a", role: "user", content: "fixture", timestamp: 1 }]);
+		chatStore.updateChat(record.id, (fresh) => ({ ...fresh, messages: [{ id: "msg_a", role: "user", content: "fixture", timestamp: 1 }] }));
 		assert.deepEqual(chatStore.getChat(record.id)?.turns?.[0]?.steps, JSON.parse(JSON.stringify(entry.steps)));
 		assert.equal(chatStore.getChat(record.id)?.turns?.length, 2);
 		assert.equal("turns" in chatStore.listChats().find((c) => c.id === record.id)!, false);

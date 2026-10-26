@@ -40,7 +40,7 @@ const QUIZ_CALL_ID = "call-c1-race";
 function bigChatWithDanglingQuiz(): string {
 	const chat = chatStore.createChat("compaction x dismiss race");
 	const big = (label: string): LhMessage => newUserMessage(`${label}: ${"x".repeat(100 * 1024)}`);
-	chatStore.saveMessages(chat.id, [
+	chatStore.updateChat(chat.id, (fresh) => ({ ...fresh, messages: [
 		big("m1"),
 		big("m2"),
 		{
@@ -51,7 +51,7 @@ function bigChatWithDanglingQuiz(): string {
 				{ type: "toolCall", id: QUIZ_CALL_ID, name: "quiz", arguments: { question: "What is a cyclic group?" } },
 			],
 		} as never,
-	]);
+	] }));
 	return chat.id;
 }
 

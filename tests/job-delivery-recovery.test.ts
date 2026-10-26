@@ -44,7 +44,7 @@ function sweep(): void {
 function chat(blocked = false) {
 	const value = stores.chatStore.createChat("Isolated delivery fixture");
 	chats.push(value.id);
-	if (blocked) stores.chatStore.saveMessages(value.id, [question]);
+	if (blocked) stores.chatStore.updateChat(value.id, (fresh) => ({ ...fresh, messages: [question] }));
 	return value;
 }
 function pending(chatId: string) {
@@ -59,7 +59,7 @@ function agent() {
 	return { handed, value: { steer: (marker: SteerMessage) => handed.push(marker) } as unknown as Parameters<typeof registerLiveAgent>[1] };
 }
 function persist(chatId: string, steers: readonly LhMessage[]): void {
-	stores.chatStore.saveMessages(chatId, [...stores.chatStore.getChat(chatId)!.messages, ...steers]);
+	stores.chatStore.updateChat(chatId, (fresh) => ({ ...fresh, messages: [...stores.chatStore.getChat(chatId)!.messages, ...steers] }));
 	noteSteersDurable(chatId, steers);
 }
 afterEach(() => {
@@ -282,7 +282,7 @@ test("fresh process restores a pending delivery on registration without a jobs p
 		const handed = []; beginTurn(${JSON.stringify(owner.id)});
 		registerLiveAgent(${JSON.stringify(owner.id)}, { steer: marker => handed.push(marker) });
 		const record = stores.chatStore.getChat(${JSON.stringify(owner.id)});
-		stores.chatStore.saveMessages(record.id, [...record.messages, ...handed]);
+		stores.chatStore.updateChat(record.id, (fresh) => ({ ...fresh, messages: [...record.messages, ...handed] }));
 		noteSteersDurable(record.id, handed); unregisterLiveAgent(record.id); endTurn(record.id);
 		console.log(JSON.stringify(handed.map(marker => marker.id)));
 	`;
