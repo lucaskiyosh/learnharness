@@ -20,6 +20,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { SETTINGS_FILE } from "../../config.ts";
+import { atomicWriteText } from "./atomic-file.ts";
 import {
 	sanitizeUserSettings,
 	type UserSettings,
@@ -54,7 +55,7 @@ export function writeSettings(raw: unknown): UserSettings {
 	const settings = sanitizeUserSettings(raw);
 	if (!settings) throw new Error("settings record must be a JSON object");
 	fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
-	fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, "\t"), "utf-8");
+	atomicWriteText(SETTINGS_FILE, JSON.stringify(settings, null, "\t"));
 	return settings;
 }
 
