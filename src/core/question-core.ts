@@ -462,6 +462,17 @@ export interface QuestionAnswerData {
 	 *  2026-10-03) — a separate channel from `thinking`, captured by the
 	 *  reading field and riding the check answer. Absent when empty. */
 	readingThinking?: string;
+	/** Math-pad provenance (V1, fork 2026-10-27): the answer's
+	 *  text/thinking was WRITTEN BY HAND on the pad and confirmed against
+	 *  the recognizer's reading. Provenance WITHOUT strokes — the raw
+	 *  strokes never persist; the confirmed expression + its state ride
+	 *  the record (details/UI) and a `handwritten` marker reaches the
+	 *  model. Absent on every pre-pad answer — no migration. */
+	handwriting?: {
+		latex: string;
+		confidence?: number;
+		corrected?: boolean;
+	};
 	confidence?: number; // quiz only: the learner's stated probability (0-100, raw) that his selected answer is correct — never sent on "I don't know" (owner, 2026-10-01)
 	correct?: boolean; // quiz only
 	correctIndices?: number[]; // quiz only (rendering)
@@ -490,6 +501,13 @@ export interface AnswerRequest {
 	thinking?: string; // the reasoning-on-the-question channel (was `note`)
 	readingThinking?: string; // the thinking-while-reading channel (check answers)
 	confidence?: number; // quiz only: 0-100 raw probability — 50 is a real coin flip, always sent (owner, 2026-10-01)
+	/** Math-pad provenance (V1, fork 2026-10-27) — set when the pad fed
+	 *  the answer's text/thinking field. */
+	handwriting?: {
+		latex: string;
+		confidence?: number;
+		corrected?: boolean;
+	};
 }
 
 /** The confidence slider's snap stops (owner, 2026-10-01): raw probability
@@ -730,6 +748,13 @@ export function buildAnswer(qd: QuestionData, req: AnswerRequest, tool?: string)
 	}
 	if (req.other?.trim()) base.other = req.other.trim();
 	if (req.text?.trim()) base.text = req.text.trim();
+	if (req.handwriting && req.handwriting.latex.trim().length > 0) {
+		base.handwriting = {
+			latex: req.handwriting.latex.trim(),
+			...(req.handwriting.confidence !== undefined ? { confidence: req.handwriting.confidence } : {}),
+			...(req.handwriting.corrected !== undefined ? { corrected: req.handwriting.corrected } : {}),
+		};
+	}
 
 	if (qd.kind === "quiz") {
 		base.correctIndices = qd.correctIndices ?? [];
@@ -798,5 +823,9 @@ export function compactAnswerForModel(ad: QuestionAnswerData): Record<string, un
 	const thinking = ad.thinking ?? ad.note;
 	if (thinking) out.thinking = thinking;
 	if (ad.readingThinking) out.thinkingWhileReading = ad.readingThinking;
+	// The pad's provenance (V1, fork): a pedagogically meaningful signal —
+	// the learner WROTE this by hand (effort/fluency), and may have corrected
+	// the recognition. The expression itself is already `text` — no duplicate.
+	if (ad.handwriting) out.handwritten = true;
 	return out;
 }

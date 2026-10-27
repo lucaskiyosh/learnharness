@@ -5,6 +5,7 @@ import { ChevronRightIcon } from "lucide-react";
 import { ToolContentResponse } from "@/components/ai-elements/message";
 import { Button } from "@/components/ui/button";
 import { joinDictation, useDictationTarget } from "@/components/dictation";
+import { MathPadSurface, MathPadToggle, applyHandwritingToField } from "@/components/math-pad";
 import { useEnterSubmits } from "@/components/enter-submits";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +51,10 @@ export interface PracticeDockProps {
 
 export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmit, onEscape, compactionRunning = false }: PracticeDockProps) {
 	const [thinking, setThinking] = useState("");
+	// The math pad (V1, fork 2026-10-27): fills the thinking field the same
+	// way dictated finals do. No provenance here — the practice thinking
+	// input event is not a QuestionAnswerData (the follow-up note).
+	const [padOpen, setPadOpen] = useState(false);
 	// Ref MIRRORS the field ("nothing gets lost", the question-dock
 	// discipline): a submit resuming after `await finishDictation()` reads
 	// the tail, never a stale closure.
@@ -118,9 +123,21 @@ export function PracticeDock({ problemCallId, input, expanded, onExpand, onSubmi
 				data-testid="practice-thinking-field"
 				className="m-1.5 rounded-[10px] border border-border/70 bg-background/60 transition-colors focus-within:border-primary/50"
 			>
-				<div className="px-2.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-					YOUR THINKING
+				<div className="flex items-center justify-between px-2.5 pt-2">
+					<span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">YOUR THINKING</span>
+					<MathPadToggle open={padOpen} onToggle={() => setPadOpen((v) => !v)} />
 				</div>
+				{padOpen && (
+					<MathPadSurface
+						onUse={(latex) => {
+							const v = applyHandwritingToField(thinkingRef.current, latex);
+							thinkingRef.current = v;
+							setThinking(v);
+							setPadOpen(false);
+						}}
+						onClose={() => setPadOpen(false)}
+					/>
+				)}
 				<textarea
 					value={thinking}
 					onChange={(e) => {

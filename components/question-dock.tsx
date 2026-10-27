@@ -34,9 +34,11 @@ import {
 	type QuestionMode,
 	type QuizToolInput,
 	type SelectMode,
+	type HandwritingProvenance,
 	type Phase3,
 } from "@/src/core";
 import { CONFIDENCE_COLORS, confidenceRailStyle } from "@/components/confidence-rail";
+import { MathPadSurface, MathPadToggle, applyHandwritingToField } from "@/components/math-pad";
 
 /**
  * The question dock — a pending quiz/ask REPLACES the chat composer: the
@@ -338,6 +340,13 @@ function QuestionDockForm({
 	// deliberate (the same number, the same meaning). The dock unmounts
 	// between questions, so each question starts fresh at 50.
 	const [confIdx, setConfIdx] = useState<number>(initialDraft?.confidenceIndex ?? DEFAULT_CONFIDENCE_INDEX);
+	// The math pad (V1, fork 2026-10-27): open state + the confirmed
+	// expression's provenance, READ AS A REF at submit (the dictation
+	// discipline — a submit resuming post-flush reads the tail). Manual
+	// typing in the field clears it (the honest rule: the content is no
+	// longer pad-authored).
+	const [padOpen, setPadOpen] = useState(false);
+	const handwritingRef = useRef<HandwritingProvenance | null>(null);
 	const selectMode: SelectMode = qd.mode === "multi-select" ? "multi-select" : "single-select";
 
 	// The PRIMARY dictation input (owner, STT round 1): while a question
@@ -397,6 +406,9 @@ function QuestionDockForm({
 			other: sel.otherSelected ? other : undefined,
 			text: qd.mode === "text" ? answerTextRef.current : undefined,
 			thinking: qd.mode !== "text" ? thinkingTextRef.current.trim() || undefined : undefined,
+			// The pad's provenance (V1, fork): rides the answer record via
+			// buildAnswer; the model sees the handwritten marker.
+			handwriting: handwritingRef.current ?? undefined,
 			// Always sent on quiz answers (owner: 50 must mean 50, never
 			// "untouched"); buildAnswer drops it on "I don't know".
 			confidence: kind === "quiz" ? CONFIDENCE_STOPS[confIdx] : undefined,
@@ -847,15 +859,37 @@ function QuestionDockForm({
 					data-testid={qd.mode === "text" ? "answer-field" : "thinking-field"}
 					className="rounded-[10px] border border-border/70 bg-background/60 transition-colors focus-within:border-primary/50"
 				>
-					<div className="px-2.5 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-						{qd.mode === "text" ? "Your answer" : "YOUR THINKING"}
+					<div className="flex items-center justify-between px-2.5 pt-2">
+						<span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+							{qd.mode === "text" ? "Your answer" : "YOUR THINKING"}
+						</span>
+						<MathPadToggle open={padOpen} onToggle={() => setPadOpen((v) => !v)} />
 					</div>
+					{padOpen && (
+						<MathPadSurface
+							onUse={(latex, provenance) => {
+								if (qd.mode === "text") {
+									const v = applyHandwritingToField(answerTextRef.current, latex);
+									answerTextRef.current = v;
+									setText(v);
+								} else {
+									const v = applyHandwritingToField(thinkingTextRef.current, latex);
+									thinkingTextRef.current = v;
+									setThinking(v);
+								}
+								handwritingRef.current = { latex, ...provenance };
+								setPadOpen(false);
+							}}
+							onClose={() => setPadOpen(false)}
+						/>
+					)}
 					{qd.mode === "text" ? (
 						<textarea
 							value={text}
 							onChange={(e) => {
 								answerTextRef.current = e.target.value;
 								setText(e.target.value);
+								handwritingRef.current = null; // manual typing — no longer pad-authored
 							}}
 							onKeyDown={(e) => {
 								// Esc ends dictation (the dictate decisions: click-again
@@ -885,6 +919,7 @@ function QuestionDockForm({
 							onChange={(e) => {
 								thinkingTextRef.current = e.target.value;
 								setThinking(e.target.value);
+								handwritingRef.current = null; // manual typing — no longer pad-authored
 							}}
 							onKeyDown={(e) => {
 								// Esc ends dictation (the dictate decisions: click-again

@@ -12,10 +12,10 @@ import { describe, it } from "node:test";
 import { AUTH_KEYS, genericProviderKeyGuard, isKnownAuthKey, maskKey, validateKeyShape } from "../src/core/auth-keys.ts";
 
 describe("the catalog", () => {
-	it("is exactly the three CURATED app-service keys (provider keys live in the provider table)", () => {
+	it("is exactly the five CURATED app-service keys (provider keys live in the provider table; the Mathpix pair joined with the math pad, fork 2026-10-27)", () => {
 		assert.deepEqual(
 			AUTH_KEYS.map((k) => k.id),
-			["DEEPGRAM_API_KEY", "TAVILY_API_KEY", "BRAVE_API_KEY"],
+			["DEEPGRAM_API_KEY", "TAVILY_API_KEY", "BRAVE_API_KEY", "MATHPIX_APP_ID", "MATHPIX_APP_KEY"],
 		);
 		for (const k of AUTH_KEYS) {
 			assert.ok(k.label.length > 0, `${k.id} has a label`);
@@ -59,6 +59,18 @@ describe("validateKeyShape (the 400 gate — curated keys)", () => {
 		assert.ok(validateKeyShape("DEEPGRAM_API_KEY", "a".repeat(40)).ok);
 		assert.ok(!validateKeyShape("DEEPGRAM_API_KEY", "a".repeat(19)).ok, "truncated paste");
 		assert.ok(!validateKeyShape("DEEPGRAM_API_KEY", "a b c d e f g h i j k l m n o p q r s").ok, "whitespace");
+	});
+
+	it("Mathpix app id: console-issued short ids — a ≥8 floor, no whitespace", () => {
+		assert.ok(validateKeyShape("MATHPIX_APP_ID", "app12345").ok);
+		assert.ok(!validateKeyShape("MATHPIX_APP_ID", "ab").ok, "truncated paste");
+		assert.ok(!validateKeyShape("MATHPIX_APP_ID", "has space").ok, "whitespace");
+	});
+
+	it("Mathpix app key: no public format — a ≥20-char truncation guard, no whitespace", () => {
+		assert.ok(validateKeyShape("MATHPIX_APP_KEY", "k".repeat(40)).ok);
+		assert.ok(!validateKeyShape("MATHPIX_APP_KEY", "k".repeat(19)).ok, "truncated paste");
+		assert.ok(!validateKeyShape("MATHPIX_APP_KEY", "a b c d e f g h i j k l m n o p q r s").ok, "whitespace");
 	});
 
 	it("trims surrounding paste whitespace before checking", () => {

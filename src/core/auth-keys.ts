@@ -48,6 +48,18 @@ export const AUTH_KEYS: readonly AuthKeyInfo[] = [
 		description: "Web-search engine for the researcher sub-agent — the alternative to Tavily. Setting the key activates it.",
 		docsUrl: "https://brave.com/search/api/",
 	},
+	{
+		id: "MATHPIX_APP_ID",
+		label: "Mathpix",
+		description: "Handwriting recognition for the math pad (the app id from the Mathpix console — pairs with the app key).",
+		docsUrl: "https://console.mathpix.com/",
+	},
+	{
+		id: "MATHPIX_APP_KEY",
+		label: "Mathpix",
+		description: "Handwriting recognition for the math pad — the app key that pairs with the Mathpix app id.",
+		docsUrl: "https://console.mathpix.com/",
+	},
 ] as const;
 
 const AUTH_KEY_IDS: ReadonlySet<string> = new Set(AUTH_KEYS.map((k) => k.id));
@@ -162,6 +174,13 @@ export function validateKeyShape(id: string, rawValue: string): KeyShapeResult {
 			// No public format — a length floor + paste hygiene only.
 			return nonEmpty(20);
 		case "DEEPGRAM_API_KEY":
+			// No public format — the length floor only catches truncated pastes.
+			return nonEmpty(20);
+		case "MATHPIX_APP_ID":
+			// Console-issued app ids are short alphanumeric strings — a low
+			// floor + paste hygiene only (no public family format).
+			return nonEmpty(8);
+		case "MATHPIX_APP_KEY":
 			// No public format — the length floor only catches truncated pastes.
 			return nonEmpty(20);
 		default:

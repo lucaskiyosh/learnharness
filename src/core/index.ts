@@ -80,3 +80,7 @@ export * from "./coverage.ts";
 // ONE session→markdown formatter — the extractor's view and the user-facing
 // export share it. Pure, browser-safe.
 export * from "./session-markdown.ts";
+// Handwriting (math pad V1, fork 2026-10-27): the stroke contract, the
+// swappable recognizer seam, and the pure Mathpix adapter halves.
+// Browser-safe — the server route does the calling.
+export * from "./handwriting.ts";
